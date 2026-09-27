@@ -5,6 +5,8 @@ import { ClipboardCopy, Download, FlaskConical, Loader2, RefreshCw, Send, Sparkl
 import { analyzeSubject } from "../../lib/mail/deliverability";
 import type { GenerateResponse } from "../../lib/mail/types";
 import { useMailStore } from "../../store/mail";
+import { AdminTokenField } from "./AdminTokenField";
+import { useMailStatus } from "./api";
 import { DeliverabilityPanel } from "./DeliverabilityPanel";
 import { useCampaign } from "./useCampaign";
 import { Button, Field, Notice, Section, TextArea, TextInput } from "./ui";
@@ -170,6 +172,8 @@ interface SendResult {
   blockers?: string[];
   variantCounts?: Record<string, number>;
   sample?: { to: string; subject: string } | null;
+  warnings?: string[];
+  bounced?: number;
   error?: string;
 }
 
@@ -180,10 +184,11 @@ function SendPanel() {
   const [split, setSplit] = useState(1);
   const [useCustomSmtp, setUseCustomSmtp] = useState(false);
   const [smtp, setSmtp] = useState({ host: "", port: "587", secure: false, user: "", pass: "" });
-  const [token, setToken] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [result, setResult] = useState<SendResult | null>(null);
   const [confirming, setConfirming] = useState(false);
+  const status = useMailStatus();
+  const hasAudience = state.audience === "contacts" || state.recipients.length > 0;
 
   async function call(mode: "dry_run" | "test" | "send") {
     setBusy(mode);
@@ -191,7 +196,7 @@ function SendPanel() {
     try {
       const res = await fetch("/api/mail/send", {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...(token ? { "x-mail-token": token } : {}) },
+        headers: { "Content-Type": "application/json", ...(state.adminToken ? { "x-mail-token": state.adminToken } : {}) },
         body: JSON.stringify({
           mode,
           testEmail,
@@ -204,7 +209,8 @@ function SendPanel() {
           campaignName: `${state.brief.brandName}-${state.brief.goal}`,
           subjectIndex: state.subjectIndex,
           splitSubjects: split,
-          recipients: state.recipients,
+          audience: state.audience,
+          recipients: state.audience === "list" ? state.recipients : [],
           suppressed: state.suppressed,
           smtp: useCustomSmtp ? { ...smtp, port: Number(smtp.port) } : undefined,
         }),
@@ -236,10 +242,8 @@ function SendPanel() {
             {copy.subjects.length >= 3 && <option value={3}>A/B/C (3 variants)</option>}
           </select>
         </Field>
-        <Field label="Send token" hint="Only needed if the server sets MAIL_SEND_TOKEN.">
-          <TextInput type="password" value={token} onChange={(e) => setToken(e.target.value)} autoComplete="off" />
-        </Field>
       </div>
+      <AdminTokenField required={status?.adminTokenRequired} />
 
       <label className="flex items-center gap-2 text-xs text-slate-600">
         <input type="checkbox" checked={useCustomSmtp} onChange={(e) => setUseCustomSmtp(e.target.checked)} />
@@ -259,12 +263,12 @@ function SendPanel() {
       )}
 
       <div className="flex flex-wrap gap-2">
-        <Button onClick={() => call("dry_run")} disabled={!state.recipients.length || !!busy}>
+        <Button onClick={() => call("dry_run")} disabled={!hasAudience || !!busy}>
           {busy === "dry_run" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FlaskConical className="h-3.5 w-3.5" />} Dry run
         </Button>
         {!confirming ? (
-          <Button variant="primary" onClick={() => setConfirming(true)} disabled={!state.recipients.length || !!busy}>
-            <Send className="h-3.5 w-3.5" /> Send to list
+          <Button variant="primary" onClick={() => setConfirming(true)} disabled={!hasAudience || !!busy}>
+            <Send className="h-3.5 w-3.5" /> Send campaign
           </Button>
         ) : (
           <>
@@ -275,7 +279,7 @@ function SendPanel() {
           </>
         )}
       </div>
-      {!state.recipients.length && <p className="text-[11px] text-slate-400">Add recipients in step 4 to dry-run or send to a list.</p>}
+      {!hasAudience && <p className="text-[11px] text-slate-400">Add recipients in step 4 (or choose saved contacts) to dry-run or send.</p>}
 
       {result && <SendResultView r={result} />}
     </Section>
@@ -306,9 +310,10 @@ function SendResultView({ r }: { r: SendResult }) {
         </Notice>
       ) : (
         <Notice tone={r.failed?.length ? "warn" : "success"}>
-          {r.mode === "test" ? "Test sent." : <>Sent <strong>{r.sent}</strong>{r.failed?.length ? `, ${r.failed.length} failed` : ""}, skipped {r.skipped?.length ?? 0}.{variants}</>}
+          {r.mode === "test" ? "Test sent." : <>Sent <strong>{r.sent}</strong>{r.failed?.length ? `, ${r.failed.length} failed` : ""}{r.bounced ? ` (${r.bounced} hard bounces, now suppressed)` : ""}, skipped {r.skipped?.length ?? 0}.{variants}</>}
         </Notice>
       )}
+      {r.warnings?.map((w) => <Notice key={w} tone="warn">{w}</Notice>)}
       {!!r.skipped?.length && (
         <details className="text-[11px] text-slate-500">
           <summary className="cursor-pointer">Skipped ({r.skipped.length})</summary>

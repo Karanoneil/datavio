@@ -3,8 +3,9 @@
 import { useState } from "react";
 import { Globe, Loader2 } from "lucide-react";
 import { REGIONS } from "../../lib/mail/themes";
-import type { CheckResult, Compliance } from "../../lib/mail/types";
+import { unsubscribeModeOf, type CheckResult, type Compliance } from "../../lib/mail/types";
 import { useMailStore } from "../../store/mail";
+import { useMailStatus } from "./api";
 import { CheckRow } from "./DeliverabilityPanel";
 import { Button, Field, Notice, OptionCards, Section, Select, TextInput } from "./ui";
 
@@ -36,9 +37,21 @@ export function StepCompliance() {
       </Section>
 
       <Section title="Unsubscribe & privacy">
-        <Field label="Unsubscribe URL" hint="From your store or ESP. The recipient's address is appended as ?email=, or use {{email}} in the URL. It must accept a POST for Gmail's one-click unsubscribe.">
-          <TextInput value={c.unsubscribeUrl} onChange={(e) => set({ unsubscribeUrl: e.target.value })} placeholder="https://northtrail.com/unsubscribe" />
-        </Field>
+        <OptionCards
+          value={unsubscribeModeOf(c)}
+          onChange={(unsubscribeMode) => set({ unsubscribeMode })}
+          options={[
+            { id: "builtin", label: "Built-in (recommended)", hint: "Signed one-click links, a hosted confirmation page, recorded instantly in your contacts." },
+            { id: "external", label: "My store / ESP handles it", hint: "Use your own unsubscribe URL. Datavio can't see who opted out." },
+          ]}
+        />
+        {unsubscribeModeOf(c) === "builtin" ? (
+          <UnsubscribeStatus />
+        ) : (
+          <Field label="Unsubscribe URL" hint="The recipient's address is appended as ?email=, or use {{email}} in the URL. It must accept a POST for Gmail's one-click unsubscribe.">
+            <TextInput value={c.unsubscribeUrl} onChange={(e) => set({ unsubscribeUrl: e.target.value })} placeholder="https://northtrail.com/unsubscribe" />
+          </Field>
+        )}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="Preferences URL (optional)">
             <TextInput value={c.preferencesUrl} onChange={(e) => set({ preferencesUrl: e.target.value })} placeholder="https://northtrail.com/account/email" />
@@ -112,5 +125,23 @@ function DomainCheck({ email }: { email: string }) {
         </div>
       )}
     </Section>
+  );
+}
+
+function UnsubscribeStatus() {
+  const status = useMailStatus();
+  if (!status) return null;
+  if (!status.database) return <Notice tone="error">The database isn&apos;t available ({status.databaseError}), so built-in unsubscribe can&apos;t record opt-outs. Set DATABASE_URL, or use your own URL.</Notice>;
+  const https = status.publicBaseUrl.startsWith("https://");
+  return (
+    <div className="space-y-2">
+      <Notice tone={https ? "success" : "warn"}>
+        Links will look like <code>{status.publicBaseUrl}/u/…</code>.{" "}
+        {https ? "Recipients click once to confirm; Gmail/Yahoo one-click works from the inbox." : "That address isn't public https. Fine for testing, but set PUBLIC_BASE_URL before real sends."}
+      </Notice>
+      {status.database === "sqlite" && (
+        <Notice tone="info">Contacts are stored in a local SQLite file. That&apos;s fine on one server; on serverless hosting (Vercel, Netlify) set DATABASE_URL to Postgres, or unsubscribes will be lost.</Notice>
+      )}
+    </div>
   );
 }

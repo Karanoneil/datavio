@@ -31,6 +31,10 @@ interface MailState {
   copySource: "ai" | "rules" | null;
   copyNotes: string[];
   subjectIndex: number;
+  /** Who the campaign goes to: an uploaded list, or every eligible saved contact. */
+  audience: "list" | "contacts";
+  /** MAIL_ADMIN_TOKEN for this browser tab (sessionStorage only). */
+  adminToken: string;
 
   setStep: (s: MailStep) => void;
   setBrief: (b: Partial<Brief>) => void;
@@ -43,7 +47,28 @@ interface MailState {
   setCopy: (copy: EmailCopy | null, source?: "ai" | "rules", notes?: string[]) => void;
   updateCopy: (c: Partial<EmailCopy>) => void;
   setSubjectIndex: (i: number) => void;
+  setAudience: (a: "list" | "contacts") => void;
+  setAdminToken: (t: string) => void;
   reset: () => void;
+}
+
+// The admin token lives in sessionStorage: it survives reloads within the tab but is cleared when
+// the tab closes, and it's never written to localStorage with the rest of the campaign.
+const TOKEN_KEY = "datavio-mail-admin-token";
+
+function readSessionToken(): string {
+  try {
+    return typeof window === "undefined" ? "" : window.sessionStorage.getItem(TOKEN_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function writeSessionToken(token: string) {
+  try {
+    if (token) window.sessionStorage.setItem(TOKEN_KEY, token);
+    else window.sessionStorage.removeItem(TOKEN_KEY);
+  } catch {}
 }
 
 const initial = {
@@ -61,6 +86,7 @@ const initial = {
     unsubscribeUrl: "",
     preferencesUrl: "",
     privacyUrl: "",
+    unsubscribeMode: "builtin",
     region: "global",
     consentBasis: "unknown",
     usesTrackingPixel: false,
@@ -72,6 +98,8 @@ const initial = {
   copySource: null as "ai" | "rules" | null,
   copyNotes: [] as string[],
   subjectIndex: 0,
+  audience: "list" as "list" | "contacts",
+  adminToken: readSessionToken(),
 };
 
 export const useMailStore = create<MailState>()(
@@ -95,7 +123,12 @@ export const useMailStore = create<MailState>()(
       setCopy: (copy, copySource, copyNotes) => set({ copy, copySource: copySource ?? null, copyNotes: copyNotes ?? [], subjectIndex: 0 }),
       updateCopy: (c) => set((s) => (s.copy ? { copy: { ...s.copy, ...c } } : {})),
       setSubjectIndex: (subjectIndex) => set({ subjectIndex }),
-      reset: () => set(initial),
+      setAudience: (audience) => set({ audience }),
+      setAdminToken: (adminToken) => {
+        writeSessionToken(adminToken);
+        set({ adminToken });
+      },
+      reset: () => set((s) => ({ ...initial, adminToken: s.adminToken })),
     }),
     {
       name: "datavio-mail",
@@ -113,6 +146,7 @@ export const useMailStore = create<MailState>()(
         copySource: s.copySource,
         copyNotes: s.copyNotes,
         subjectIndex: s.subjectIndex,
+        audience: s.audience,
       }),
     }
   )

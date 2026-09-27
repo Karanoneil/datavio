@@ -1,4 +1,4 @@
-import type { CheckResult, CheckSeverity, Compliance, DeliverabilityReport, EmailCopy } from "./types";
+import { unsubscribeModeOf, type CheckResult, type CheckSeverity, type Compliance, type DeliverabilityReport, type EmailCopy } from "./types";
 
 /**
  * Phrases that content filters (SpamAssassin rules, Microsoft/Outlook heuristics) and
@@ -174,7 +174,8 @@ export function analyzeEmail({ copy, html, compliance, imageCount, linkUrls }: A
   if (!compliance.postalAddress.trim()) checks.push(check("address", "compliance", r === "eu_uk" ? "warn" : "fail", "No postal address", r === "eu_uk" ? "Not strictly required by GDPR, but the EU E-Commerce Directive expects a geographic address, and it builds trust." : "CAN-SPAM and CASL require a valid physical postal address in every commercial email."));
   else checks.push(check("address", "compliance", "pass", "Postal address included", "Meets CAN-SPAM / CASL identification rules."));
 
-  if (!compliance.unsubscribeUrl.trim()) checks.push(check("unsub", "compliance", "fail", "No unsubscribe link", "Required by every law listed here. Since 2024, Gmail and Yahoo also require one-click unsubscribe (RFC 8058 List-Unsubscribe headers) for bulk senders. Datavio adds those headers when you send."));
+  if (unsubscribeModeOf(compliance) === "builtin") checks.push(check("unsub", "compliance", "pass", "Built-in unsubscribe", "Each email gets a signed one-click link and List-Unsubscribe / List-Unsubscribe-Post headers. Unsubscribes are recorded instantly and never re-imported."));
+  else if (!compliance.unsubscribeUrl.trim()) checks.push(check("unsub", "compliance", "fail", "No unsubscribe link", "Required by every law listed here. Since 2024, Gmail and Yahoo also require one-click unsubscribe (RFC 8058 List-Unsubscribe headers) for bulk senders. Datavio adds those headers when you send."));
   else if (!/^https:\/\//i.test(compliance.unsubscribeUrl) && !/^mailto:/i.test(compliance.unsubscribeUrl)) checks.push(check("unsub", "compliance", "warn", "Unsubscribe link isn't https", "Use an https:// URL so the one-click List-Unsubscribe-Post header works."));
   else checks.push(check("unsub", "compliance", "pass", "Unsubscribe link present", "A visible link plus List-Unsubscribe / List-Unsubscribe-Post headers are added on send."));
 

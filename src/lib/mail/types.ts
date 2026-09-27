@@ -61,6 +61,8 @@ export interface Compliance {
   senderEmail: string;
   replyTo: string;
   postalAddress: string;
+  /** "builtin": Datavio hosts the unsubscribe page and records it in the database. "external": your store/ESP URL. */
+  unsubscribeMode?: "builtin" | "external";
   unsubscribeUrl: string;
   preferencesUrl: string;
   privacyUrl: string;
@@ -125,4 +127,9 @@ export interface GenerateResponse {
   copy: EmailCopy;
   source: "ai" | "rules";
   notes: string[];
+}
+
+/** Campaigns saved before unsubscribeMode existed have no mode: treat a filled-in URL as external. */
+export function unsubscribeModeOf(c: Pick<Compliance, "unsubscribeMode" | "unsubscribeUrl">): "builtin" | "external" {
+  return c.unsubscribeMode ?? (c.unsubscribeUrl?.trim() ? "external" : "builtin");
 }

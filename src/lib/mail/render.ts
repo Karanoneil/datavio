@@ -1,6 +1,6 @@
 import { discountPct, formatPrice } from "./catalog";
 import { getPreset, type ThemePreset } from "./themes";
-import type { Compliance, EmailCopy, LayoutKind, Product, Recipient, ThemeChoice } from "./types";
+import { unsubscribeModeOf, type Compliance, type EmailCopy, type LayoutKind, type Product, type Recipient, type ThemeChoice } from "./types";
 
 /**
  * Email HTML renderer. Uses nested tables and inline styles because that is still the only
@@ -184,7 +184,7 @@ export function renderEmail(input: RenderInput): RenderOutput {
     : `<span style="font-family:${th.headingFont};font-size:22px;font-weight:bold;letter-spacing:1px;color:${th.text};">${esc(brandName)}</span>`;
 
   const footerLinks = [
-    compliance.unsubscribeUrl && `<a href="{{unsubscribe_url}}" style="color:${th.mutedText};text-decoration:underline;">Unsubscribe</a>`,
+    hasUnsubscribe(compliance) && `<a href="{{unsubscribe_url}}" style="color:${th.mutedText};text-decoration:underline;">Unsubscribe</a>`,
     compliance.preferencesUrl && `<a href="${esc(compliance.preferencesUrl)}" style="color:${th.mutedText};text-decoration:underline;">Email preferences</a>`,
     compliance.privacyUrl && `<a href="${esc(compliance.privacyUrl)}" style="color:${th.mutedText};text-decoration:underline;">Privacy policy</a>`,
   ].filter(Boolean).join(" &nbsp;·&nbsp; ");
@@ -264,19 +264,20 @@ function renderText(input: RenderInput, mainUrl?: string): string {
   lines.push(copy.closing);
   if (copy.ps) lines.push("", `P.S. ${copy.ps}`);
   lines.push("", "—", `You're receiving this because you subscribed to emails from ${compliance.senderName || brandName}. Sent to {{email}}.`);
-  if (compliance.unsubscribeUrl) lines.push(`Unsubscribe: {{unsubscribe_url}}`);
+  if (hasUnsubscribe(compliance)) lines.push(`Unsubscribe: {{unsubscribe_url}}`);
   if (compliance.privacyUrl) lines.push(`Privacy: ${compliance.privacyUrl}`);
   if (compliance.postalAddress) lines.push(`${compliance.senderName || brandName}, ${compliance.postalAddress}`);
   return lines.join("\n");
 }
 
 /**
- * Fill merge tags for one recipient. Values are HTML-escaped in HTML mode so a malicious
+ * Fill merge tags for one recipient. `unsubscribeUrl` is this recipient's final link (a signed
+ * built-in link, or buildUnsubscribeUrl() for an external one). Values are HTML-escaped in HTML mode so a malicious
  * first name in an uploaded list can't inject markup.
  */
-export function applyMergeTags(template: string, r: Recipient, unsubscribeBase: string, mode: "html" | "text"): string {
+export function applyMergeTags(template: string, r: Recipient, unsubscribeUrl: string, mode: "html" | "text"): string {
   const enc = mode === "html" ? esc : (s: string) => s;
-  const unsub = buildUnsubscribeUrl(unsubscribeBase, r.email);
+  const unsub = unsubscribeUrl;
   return template.replace(/\{\{\s*([a-z_]+)\s*(?:\|([^}]*))?\}\}/gi, (_m, key: string, fallback?: string) => {
     const k = key.toLowerCase();
     if (k === "unsubscribe_url") return enc(unsub);
@@ -288,6 +289,10 @@ export function applyMergeTags(template: string, r: Recipient, unsubscribeBase: 
     const v = r[k] ?? r[key];
     return enc(typeof v === "string" && v.trim() ? v : (fallback ?? "").trim());
   });
+}
+
+function hasUnsubscribe(c: Compliance): boolean {
+  return unsubscribeModeOf(c) === "builtin" || !!c.unsubscribeUrl?.trim();
 }
 
 /** Adds the recipient's email to the unsubscribe URL (as {{email}} or ?email=) so the store can match it. */

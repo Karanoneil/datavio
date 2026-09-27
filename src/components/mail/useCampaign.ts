@@ -4,8 +4,8 @@ import { useMemo } from "react";
 import { personalizeOrder, selectProducts } from "../../lib/mail/catalog";
 import { writeCopyWithRules } from "../../lib/mail/copy-engine";
 import { analyzeEmail } from "../../lib/mail/deliverability";
-import { applyMergeTags, renderEmail, slugify } from "../../lib/mail/render";
-import type { EmailCopy, Recipient } from "../../lib/mail/types";
+import { applyMergeTags, buildUnsubscribeUrl, renderEmail, slugify } from "../../lib/mail/render";
+import { unsubscribeModeOf, type EmailCopy, type Recipient } from "../../lib/mail/types";
 import { useMailStore } from "../../store/mail";
 
 export const SAMPLE_RECIPIENT: Recipient = { email: "alex@example.com", firstName: "Alex", consent: true };
@@ -44,7 +44,9 @@ export function useCampaign(previewRecipient?: Recipient) {
   const previewHtml = useMemo(() => {
     const ordered = personalizeOrder(products, typeof recipient.interest === "string" ? recipient.interest : undefined);
     const out = ordered === products ? rendered : renderEmail({ copy, products: ordered, theme, compliance, brandName: brief.brandName || "Your Store", subjectIndex, utmCampaign: campaignSlug, language: brief.language });
-    return applyMergeTags(out.html, recipient, compliance.unsubscribeUrl || "https://example.com/unsubscribe", "html");
+    // Real sends get a signed per-recipient link; the preview only needs something clickable-looking.
+    const unsub = unsubscribeModeOf(compliance) === "builtin" ? `${window.location.origin}/u/preview` : buildUnsubscribeUrl(compliance.unsubscribeUrl, recipient.email);
+    return applyMergeTags(out.html, recipient, unsub, "html");
   }, [rendered, products, recipient, copy, theme, compliance, brief.brandName, brief.language, subjectIndex, campaignSlug]);
 
   const report = useMemo(

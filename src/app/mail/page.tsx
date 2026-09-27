@@ -2,7 +2,7 @@
 
 import { useState, useSyncExternalStore } from "react";
 import Link from "next/link";
-import { ArrowLeft, ArrowRight, Eye, LayoutDashboard, Mail, PencilLine, RotateCcw } from "lucide-react";
+import { ArrowLeft, ArrowRight, BookUser, Eye, LayoutDashboard, Mail, PencilLine, RotateCcw } from "lucide-react";
 import { EmailPreview } from "../../components/mail/EmailPreview";
 import { StepAudience } from "../../components/mail/StepAudience";
 import { StepBrief } from "../../components/mail/StepBrief";
@@ -47,6 +47,9 @@ export default function MailStudio() {
           >
             <RotateCcw className="h-3.5 w-3.5" /> <span className="hidden sm:inline">New campaign</span>
           </Button>
+          <Link href="/mail/contacts" className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50">
+            <BookUser className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Contacts</span>
+          </Link>
           <Link href="/" className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50">
             <LayoutDashboard className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Dashboards</span>
           </Link>
